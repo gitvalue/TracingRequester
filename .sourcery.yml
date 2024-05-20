@@ -1,0 +1,9 @@
+sources:
+  - Sources
+templates:
+  - Sourcery/Templates/AutoMockable.stencil
+output:
+  Tests/TracingRequesterTests/AutoMockable.generated.swift
+args:
+  autoMockableTestableImports:
+    - TracingRequester

@@ -7,6 +7,8 @@ actor Requester {
     /// Request queues tracing information
     var traceInfo: [RequestQueueTraceInfo] { traceMap.values.map { $0 } }
     
+    private static let defaultMaxConcurrent: UInt = 10
+    
     private var availableQueues: Set<UInt>
     private var traceMap: [UInt: RequestQueueTraceInfo] = [:]
     
@@ -18,10 +20,10 @@ actor Requester {
     /// Designated initialiser
     /// - Parameters:
     ///   - transport: Network transport manager
-    ///   - maxConcurrent: Maximum number of concurrent requests
-    init(transport: any Transport, maxConcurrent: UInt) {
+    ///   - maxConcurrent: Maximum number of concurrent requests. Default is 10.
+    init(transport: any Transport, maxConcurrent: UInt = Requester.defaultMaxConcurrent) {
         self.transport = transport
-        self.maxConcurrent = maxConcurrent
+        self.maxConcurrent = 0 < maxConcurrent ? maxConcurrent : Requester.defaultMaxConcurrent
         self.availableQueues = Set(stride(from: 0, to: maxConcurrent, by: 1).map { $0 })
         let (stream, continuation) = Stream.makeStream()
         self.stream = stream
