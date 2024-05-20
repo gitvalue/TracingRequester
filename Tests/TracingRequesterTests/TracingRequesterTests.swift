@@ -17,15 +17,17 @@ final class TracingRequesterTests: XCTestCase {
         subject = nil
     }
         
-    func testLowLoad() async throws {
-        // given
-        // standard requester and low load
-        let numberOfRequests: UInt = 3
+    func testNormalLoad() async throws {
+        /* Given */
+        
+        // Standard requester and 50% load
+        let numberOfRequests: UInt = 10
         subject = Requester(transport: transport, maxConcurrent: numberOfRequests * 2)
         
-        // when
-        // number of requests is less then maximum concurrent capacity
-        transport.sendBytesDataVoidClosure = { _ in
+        /* When */
+        
+        // Number of requests is less than maximum concurrent capacity
+        await transport.setBytesDataVoidClosure { _ in
             try await Task.sleep(for: .milliseconds(100))
         }
                 
@@ -37,26 +39,55 @@ final class TracingRequesterTests: XCTestCase {
             }
         }
             
-        // then
-        let expectations: [XCTestExpectation] = [
-            XCTestExpectation(
-                description: "Number of occupied queues should equal to number of requests"
-            ),
-            XCTestExpectation(
-                description: "Each queue should have one sent and one succeeded request"
-            )
-        ]
+        /* Then */
         
         await requestsFinished
         let traceInfo = await subject.traceInfo
         
+        // 1. Number of occupied queues should equal to number of requests
         XCTAssert(traceInfo.count == numberOfRequests)
-        expectations[0].fulfill()
-        
+        // 2. Each queue should have one sent and one succeeded request
         XCTAssert(traceInfo.filter { $0.requestsCount == 1 }.count == numberOfRequests)
         XCTAssert(traceInfo.filter { $0.succeededRequestsCount == 1 }.count == numberOfRequests)
-        expectations[1].fulfill()
+    }
+    
+    func testOverload() async throws {
+        /* Given */
         
-        await fulfillment(of: expectations, timeout: 5.0)
+        // Standard requester and overload
+        let maxConcurrent: UInt = 10
+        let numberOfRequests: UInt = maxConcurrent * 2
+        subject = Requester(transport: transport, maxConcurrent: maxConcurrent)
+        
+        /* When */
+        
+        // Number of requests is greater than maximum concurrent capacity
+        await transport.setBytesDataVoidClosure { _ in
+            try await Task.sleep(for: .milliseconds(100))
+        }
+                
+        async let requestsFinished: Void = withThrowingTaskGroup(of: Void.self) { [subject] group in
+            for _ in 0..<numberOfRequests {
+                group.addTask {
+                    try await subject!.send(0)
+                }
+            }
+        }
+            
+        /* Then */
+        
+        await requestsFinished
+        let traceInfo = await subject.traceInfo
+        
+        // 1. Number of occupied queues should equal to maximum concurrent capacity
+        XCTAssert(traceInfo.count == maxConcurrent)
+        // 2. Overall number of sent requests should be correct
+        XCTAssert(traceInfo.map { $0.requestsCount }.reduce(0, +) == numberOfRequests)
+        // 3. Number of succeeded requests should equal to overall number of sent requests
+        XCTAssert(traceInfo.map { $0.succeededRequestsCount }.reduce(0, +) == numberOfRequests)
+    }
+    
+    func testPartialDataLoss() async throws {
+        
     }
 }
